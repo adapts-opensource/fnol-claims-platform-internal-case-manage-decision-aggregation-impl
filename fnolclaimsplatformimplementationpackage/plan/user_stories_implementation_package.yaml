@@ -1,0 +1,687 @@
+version: '1.0'
+application_name: Internal Case Management
+package_family: implementation_package
+features:
+- label: decision
+  domain: ''
+  description: An application-layer decision service that evaluates incoming case
+    payloads against configurable business rules, external eligibility/coverage references,
+    and pattern-matching criteria. The service automatically routes, classifies, or
+    dispositions cases while generating explainable decision traces and comprehensive
+    audit records. The data_store layer persists case payloads, rule configurations,
+    decision contexts, and compliance logs, maintaining strict separation between
+    stateless decision execution and durable persistence.
+  user_stories:
+  - id: US-001
+    title: Route and Disposition Cases Automatically
+    role: Case Worker/Agent
+    goal: As a case worker, I want cases to be automatically routed and classified
+      based on predefined rules so that I can focus on exceptions and high-value interactions.
+    benefit: Reduces manual triage time, minimizes routing errors, and improves SLA
+      compliance.
+    persona: Case Worker/Agent
+    persona_type: primary_business_user
+    trigger: New case arrives via intake channel
+    story: As a case worker, I want cases to be automatically routed and classified
+      based on predefined rules so that I can focus on exceptions and high-value interactions.
+    business_value: Reduces manual triage time, minimizes routing errors, and improves
+      SLA compliance.
+    priority: P0
+    preconditions: Case data is submitted, external eligibility system is available,
+      routing rules are published.
+    acceptance_criteria: []
+    algorithm_to_be_tested:
+      name: CaseRoutingAndDispositionEngine
+      purpose: Evaluate case data against eligibility, coverage, and routing rules
+        to determine disposition.
+      applies_when: Incoming case payload passes initial validation and external eligibility
+        check returns valid.
+      description: Applies prioritized rule sets to classify the case, determine routing
+        destination, and assign initial disposition status.
+      input_criteria: Validated case payload, eligibility result, coverage snapshot,
+        active rule version.
+      required_inputs:
+      - case_id
+      - applicant_id
+      - product_type
+      - jurisdiction
+      - eligibility_status
+      - coverage_effective_date
+      optional_inputs:
+      - historical_claim_count
+      - prior_case_outcome
+      - risk_indicator_flags
+      input_validation:
+      - All required fields must be non-null and match schema types
+      - Eligibility status must be one of: active, pending, terminated
+      - Jurisdiction must match supported policy catalog regions
+      freshness_requirements:
+      - Eligibility data must be refreshed within 5 minutes of case submission
+      - Rule configuration must be versioned and active for the current time window
+      processing_steps:
+      - step: 1
+        description: Load active rule version and apply input validation
+      - step: 2
+        description: Evaluate eligibility rules and coverage constraints
+      - step: 3
+        description: Apply routing priority matrix (product > jurisdiction > risk
+          tier)
+      - step: 4
+        description: Determine disposition and generate explainability trace
+      - step: 5
+        description: Persist decision context and emit routing event
+      business_rules:
+      - High-risk indicators trigger manual review queue
+      - Expired coverage routes to eligibility exception
+      - Jurisdiction mismatch routes to compliance review
+      decision_points:
+      - decision: Eligibility valid?
+        rule: If eligible and coverage active, proceed to routing
+        expected_outcome: Route to appropriate queue
+      - decision: Risk tier high?
+        rule: If yes, override auto-disposition and route to manual review
+        expected_outcome: Exception queue assignment
+      output_criteria:
+        success_outputs:
+        - case_id
+        - disposition_code
+        - routing_destination
+        - explainability_trace_id
+        - status: routed
+        failure_outputs:
+        - case_id
+        - disposition_code: exception
+        - routing_destination: manual_review_queue
+        - explainability_trace_id
+        - status: exception_pending
+      status_updates:
+      - case_status -> routed
+      - case_status -> exception_pending
+      emitted_events:
+      - case.routed
+      - case.exception_flagged
+      user_visible_outputs:
+      - Case status update in agent console
+      - Routing destination notification
+      - Decision summary for audit
+      edge_cases:
+      - Case submitted with partial eligibility data
+      - Rule version conflict during evaluation
+      - External eligibility system timeout
+      negative_scenarios:
+      - Ineligible applicant attempts submission
+      - Coverage expired before case intake
+      - Rule configuration missing required fields
+      explainability_expectations:
+      - Rule IDs evaluated
+      - Decision path taken
+      - Thresholds and conditions met
+      - Override reasons if applicable
+      audit_evidence:
+      - Full input payload snapshot
+      - Rule version and timestamp
+      - Decision context JSON
+      - User/system actor ID
+      sample_test_scenarios:
+      - scenario: Valid eligible case
+        given: Active coverage, standard product, low risk
+        when: Case submitted
+        then: Auto-routed to standard queue, disposition code R01
+      - scenario: High risk indicator
+        given: Prior fraud flag, active coverage
+        when: Case submitted
+        then: Routed to manual review, disposition code X02
+      main_success_flow:
+      - step: 1
+        description: System receives validated case payload
+      - step: 2
+        description: Eligibility check passes
+      - step: 3
+        description: Routing rules evaluate and assign destination
+      - step: 4
+        description: Decision context persisted, event emitted
+      alternate_flows:
+      - scenario: Partial eligibility
+        behavior: System requests additional data, status -> data_request_pending
+      exception_flows:
+      - scenario: Eligibility system down
+        behavior: Fallback to cached eligibility, status -> eligibility_check_pending
+      acceptance_criteria:
+      - Auto-routing completes within 2 seconds for 95% of cases
+      - Explainability trace generated for every disposition
+      - Audit log contains full decision context
+      - Rule versioning prevents stale execution
+      data_dependencies:
+      - Case payload schema
+      - Eligibility registry response
+      - Active rule configuration
+      - Routing destination catalog
+      audit_or_explainability_needs:
+      - Immutable decision context storage
+      - Rule evaluation sequence logging
+      - Timestamp and actor attribution
+      layer_implications:
+        integration:
+        - Fetch eligibility and coverage data
+        - Handle system timeouts and fallbacks
+        application:
+        - Execute routing rules
+        - Generate explainability trace
+        - Persist decision context
+        - Emit routing events
+    data_dependencies: []
+    audit_or_explainability_needs: []
+    layer_implications: {}
+    sample_test_scenarios: []
+    main_success_flow: []
+    alternate_flows: []
+    exception_flows: []
+  - id: US-002
+    title: Submit Case and View Status
+    role: Applicant/Member
+    goal: As an applicant, I want to submit my case and track its status so I know
+      when it is being processed and what information is needed.
+    benefit: Improves customer experience, reduces support calls, and provides transparency
+      into case lifecycle.
+    persona: Applicant/Member
+    persona_type: secondary_business_user
+    trigger: Member initiates case submission via portal
+    story: As an applicant, I want to submit my case and track its status so I know
+      when it is being processed and what information is needed.
+    business_value: Improves customer experience, reduces support calls, and provides
+      transparency into case lifecycle.
+    priority: P1
+    preconditions: Member authentication, case form available, validation rules active.
+    acceptance_criteria: []
+    algorithm_to_be_tested:
+      name: CaseSubmissionValidationEngine
+      purpose: Validate case inputs against schema and business rules before acceptance.
+      applies_when: Member submits case form
+      description: Performs real-time validation, rejects invalid submissions, and
+        returns actionable error messages.
+      input_criteria: Form data, member profile, rule schema
+      required_inputs:
+      - member_id
+      - case_type
+      - supporting_documents
+      - contact_preference
+      optional_inputs:
+      - referral_source
+      - preferred_language
+      input_validation:
+      - Required fields must be populated
+      - Document types must match allowed extensions
+      - Contact info must match format rules
+      freshness_requirements:
+      - Member profile data refreshed on submission
+      processing_steps:
+      - step: 1
+        description: Parse form data
+      - step: 2
+        description: Apply schema and business rules
+      - step: 3
+        description: Return success or validation errors
+      business_rules:
+      - Incomplete required fields block submission
+      - Invalid document types rejected
+      - Duplicate case detection enabled
+      decision_points:
+      - decision: Valid submission?
+        rule: If valid, proceed to routing
+        expected_outcome: Case created, status -> submitted
+      output_criteria:
+        success_outputs:
+        - case_id
+        - status: submitted
+        - estimated_review_time
+        failure_outputs:
+        - case_id: null
+        - status: validation_failed
+        - error_messages
+      status_updates:
+      - case_status -> submitted
+      - case_status -> validation_failed
+      emitted_events:
+      - case.submitted
+      - case.validation_failed
+      user_visible_outputs:
+      - Submission confirmation
+      - Error messages with guidance
+      - Status tracking link
+      edge_cases:
+      - Network timeout during submission
+      - Concurrent submissions
+      - Unsupported document format
+      negative_scenarios:
+      - Missing required fields
+      - Expired member profile
+      - Duplicate case attempt
+      explainability_expectations:
+      - Clear error mapping to business rules
+      - Audit of validation attempt
+      audit_evidence:
+      - Input snapshot
+      - Validation rule IDs triggered
+      - Timestamp
+      sample_test_scenarios:
+      - scenario: Complete valid submission
+        given: All fields filled, valid docs
+        when: Submit
+        then: Case created, status -> submitted
+      - scenario: Missing required field
+        given: case_type empty
+        when: Submit
+        then: Validation error returned, status -> validation_failed
+      main_success_flow:
+      - step: 1
+        description: Member submits form
+      - step: 2
+        description: Validation passes
+      - step: 3
+        description: Case created and routed
+      alternate_flows:
+      - scenario: Network error
+        behavior: Retry with exponential backoff
+      exception_flows:
+      - scenario: Duplicate detection
+        behavior: Flag and notify member
+      acceptance_criteria:
+      - Validation completes within 1 second
+      - Error messages are actionable
+      - Audit log captures validation attempt
+      data_dependencies:
+      - Member profile
+      - Case schema
+      - Validation rules
+      audit_or_explainability_needs:
+      - Validation rule execution log
+      - Error mapping trace
+      layer_implications:
+        integration:
+        - Fetch member profile
+        - Check duplicate registry
+        application:
+        - Validate inputs
+        - Generate case ID
+        - Emit submission event
+    data_dependencies: []
+    audit_or_explainability_needs: []
+    layer_implications: {}
+    sample_test_scenarios: []
+    main_success_flow: []
+    alternate_flows: []
+    exception_flows: []
+  - id: US-003
+    title: Monitor SLAs and Exception Queues
+    role: Operations Analyst
+    goal: As an operations analyst, I want to monitor case routing SLAs and exception
+      queues so I can reallocate resources and prevent bottlenecks.
+    benefit: Enables proactive resource management, improves SLA compliance, and reduces
+      operational risk.
+    persona: Operations Analyst
+    persona_type: operations_user
+    trigger: Scheduled dashboard refresh or threshold breach
+    story: As an operations analyst, I want to monitor case routing SLAs and exception
+      queues so I can reallocate resources and prevent bottlenecks.
+    business_value: Enables proactive resource management, improves SLA compliance,
+      and reduces operational risk.
+    priority: P2
+    preconditions: Real-time case status data available, SLA thresholds configured.
+    acceptance_criteria: []
+    algorithm_to_be_tested:
+      name: SLAMonitoringAndEscalationEngine
+      purpose: Evaluate case aging against SLA thresholds and trigger escalations.
+      applies_when: Scheduled evaluation or threshold breach detected
+      description: Compares case timestamps against SLA windows, flags breaches, and
+        triggers notifications or re-routing.
+      input_criteria: Case timestamps, SLA config, queue capacity
+      required_inputs:
+      - case_id
+      - submission_timestamp
+      - current_timestamp
+      - sla_window_hours
+      - queue_capacity
+      optional_inputs:
+      - priority_level
+      - agent_availability
+      input_validation:
+      - Timestamps must be valid ISO 8601
+      - SLA window must be positive integer
+      freshness_requirements:
+      - Data refreshed every 5 minutes
+      processing_steps:
+      - step: 1
+        description: Calculate case age
+      - step: 2
+        description: Compare against SLA window
+      - step: 3
+        description: If breach, trigger escalation
+      - step: 4
+        description: Update dashboard and emit event
+      business_rules:
+      - Breach > 50% triggers warning
+      - Breach > 100% triggers escalation
+      - Priority cases bypass queue limits
+      decision_points:
+      - decision: SLA breached?
+        rule: If yes, escalate
+        expected_outcome: Notification sent, status -> sla_breach
+      output_criteria:
+        success_outputs:
+        - case_id
+        - sla_status
+        - escalation_level
+        failure_outputs:
+        - case_id
+        - sla_status: within_window
+      status_updates:
+      - case_status -> sla_warning
+      - case_status -> sla_breach
+      emitted_events:
+      - case.sla_warning
+      - case.sla_breach
+      user_visible_outputs:
+      - Dashboard alert
+      - Escalation notification
+      - Queue rebalancing suggestion
+      edge_cases:
+      - System clock skew
+      - Queue capacity change mid-evaluation
+      - Holiday calendar adjustments
+      negative_scenarios:
+      - Missing SLA config
+      - Invalid timestamps
+      - System outage during evaluation
+      explainability_expectations:
+      - SLA window vs actual age
+      - Escalation rule triggered
+      audit_evidence:
+      - Evaluation timestamp
+      - Config version
+      - Event log
+      sample_test_scenarios:
+      - scenario: SLA within window
+        given: Case age 2h, SLA 4h
+        when: Evaluate
+        then: No escalation
+      - scenario: SLA breached
+        given: Case age 5h, SLA 4h
+        when: Evaluate
+        then: Escalation triggered
+      main_success_flow:
+      - step: 1
+        description: System evaluates case age
+      - step: 2
+        description: Compares against SLA
+      - step: 3
+        description: Triggers escalation if needed
+      alternate_flows:
+      - scenario: Config missing
+        behavior: Use default SLA, log warning
+      exception_flows:
+      - scenario: Evaluation failure
+        behavior: Retry, alert ops
+      acceptance_criteria:
+      - Evaluation runs every 5 minutes
+      - Escalations trigger within 1 minute of breach
+      - Dashboard reflects real-time status
+      data_dependencies:
+      - Case timestamps
+      - SLA configuration
+      - Queue capacity data
+      audit_or_explainability_needs:
+      - Evaluation log
+      - Escalation trigger record
+      layer_implications:
+        integration:
+        - Fetch queue capacity
+        - Send notifications
+        application:
+        - Run SLA evaluation
+        - Update status
+        - Emit events
+    data_dependencies: []
+    audit_or_explainability_needs: []
+    layer_implications: {}
+    sample_test_scenarios: []
+    main_success_flow: []
+    alternate_flows: []
+    exception_flows: []
+  - id: US-004
+    title: Manage Routing Rules and Thresholds
+    role: Policy Administrator
+    goal: As a policy administrator, I want to update routing rules and thresholds
+      without code changes so that business logic can evolve quickly.
+    benefit: Reduces deployment cycles, enables business agility, and maintains governance
+      over rule changes.
+    persona: Policy Administrator
+    persona_type: admin_or_configuration_user
+    trigger: Business request to update routing logic
+    story: As a policy administrator, I want to update routing rules and thresholds
+      without code changes so that business logic can evolve quickly.
+    business_value: Reduces deployment cycles, enables business agility, and maintains
+      governance over rule changes.
+    priority: P1
+    preconditions: Admin role assigned, rule editor available, versioning enabled.
+    acceptance_criteria: []
+    algorithm_to_be_tested:
+      name: RuleConfigurationVersioningEngine
+      purpose: Validate, version, and activate rule updates safely.
+      applies_when: Admin submits rule changes
+      description: Performs syntax validation, conflict detection, staging, and approval
+        workflow before activation.
+      input_criteria: Rule payload, effective date, approval status
+      required_inputs:
+      - rule_id
+      - rule_conditions
+      - rule_actions
+      - effective_date
+      - change_request_id
+      optional_inputs:
+      - rollback_version
+      - test_scenario_ids
+      input_validation:
+      - Conditions must be syntactically valid
+      - Effective date must be future or present
+      - Change request must be approved
+      freshness_requirements:
+      - Rule version must be current or future
+      processing_steps:
+      - step: 1
+        description: Parse and validate rule syntax
+      - step: 2
+        description: Check for conflicts with active rules
+      - step: 3
+        description: Stage for approval
+      - step: 4
+        description: Activate upon approval
+      business_rules:
+      - Conflicting rules require manual resolution
+      - Effective date cannot be in the past
+      - Approval workflow mandatory for production rules
+      decision_points:
+      - decision: Valid and conflict-free?
+        rule: If yes, stage for approval
+        expected_outcome: Rule version created
+      output_criteria:
+        success_outputs:
+        - rule_version_id
+        - status: staged
+        - approval_url
+        failure_outputs:
+        - rule_version_id: null
+        - status: validation_failed
+        - error_messages
+      status_updates:
+      - rule_status -> staged
+      - rule_status -> active
+      - rule_status -> validation_failed
+      emitted_events:
+      - rule.staged
+      - rule.active
+      - rule.validation_failed
+      user_visible_outputs:
+      - Staging confirmation
+      - Approval request
+      - Activation notification
+      edge_cases:
+      - Circular rule dependency
+      - Simultaneous updates
+      - Invalid syntax
+      negative_scenarios:
+      - Missing required fields
+      - Past effective date
+      - Unapproved change request
+      explainability_expectations:
+      - Rule diff view
+      - Validation rule hits
+      - Conflict resolution log
+      audit_evidence:
+      - Change request ID
+      - Approval chain
+      - Version history
+      sample_test_scenarios:
+      - scenario: Valid rule update
+        given: New routing condition, future date, approved
+        when: Submit
+        then: Rule staged, approval requested
+      - scenario: Conflicting rules
+        given: Overlapping conditions
+        when: Submit
+        then: Conflict flagged, manual review required
+      main_success_flow:
+      - step: 1
+        description: Admin submits rule changes
+      - step: 2
+        description: Validation passes
+      - step: 3
+        description: Staged for approval
+      - step: 4
+        description: Activated upon approval
+      alternate_flows:
+      - scenario: Validation fails
+        behavior: Return errors, allow edit
+      exception_flows:
+      - scenario: Approval timeout
+        behavior: Auto-reject, notify admin
+      acceptance_criteria:
+      - Validation completes within 3 seconds
+      - Versioning tracks all changes
+      - Approval workflow enforced
+      data_dependencies:
+      - Rule schema
+      - Version control system
+      - Approval workflow engine
+      audit_or_explainability_needs:
+      - Change history
+      - Approval records
+      - Validation logs
+      layer_implications:
+        integration:
+        - Fetch approval workflow state
+        - Update version control
+        application:
+        - Validate rule syntax
+        - Detect conflicts
+        - Manage versioning
+        - Emit events
+    data_dependencies: []
+    audit_or_explainability_needs: []
+    layer_implications: {}
+    sample_test_scenarios: []
+    main_success_flow: []
+    alternate_flows: []
+    exception_flows: []
+  - id: US-005
+    title: Review Decision Explanations and Audit Logs
+    role: Compliance Auditor
+    goal: As a compliance auditor, I want to review decision explanations and audit
+      logs so I can verify regulatory compliance and investigate disputes.
+    benefit: Ensures regulatory adherence, supports dispute resolution, and maintains
+      audit readiness.
+    persona: Compliance Auditor
+    persona_type: compliance_or_audit_user
+    trigger: Audit request or regulatory inquiry
+    story: As a compliance auditor, I want to review decision explanations and audit
+      logs so I can verify regulatory compliance and investigate disputes.
+    business_value: Ensures regulatory adherence, supports dispute resolution, and
+      maintains audit readiness.
+    priority: P2
+    preconditions: Audit role assigned, decision context accessible, retention policies
+      active.
+    acceptance_criteria: []
+    algorithm_to_be_tested:
+      name: AuditTrailReconciliationEngine
+      purpose: Reconstruct decision context and verify audit completeness.
+      applies_when: Auditor requests decision review
+      description: Fetches decision context, validates completeness, and generates
+        audit report.
+      input_criteria: case_id, audit_request_id, time_window
+      required_inputs:
+      - case_id
+      - audit_request_id
+      - start_timestamp
+      - end_timestamp
+      optional_inputs:
+      - rule_version_filter
+      - user_id_filter
+      input_validation:
+      - Timestamps must be valid
+      - Case ID must exist
+      freshness_requirements:
+      - Audit data must be immutable and retained per policy
+      processing_steps:
+      - step: 1
+        description: Fetch decision context
+      - step: 2
+        description: Validate completeness
+      - step: 3
+        description: Generate audit report
+      business_rules:
+      - All decision contexts must be retained for X years
+      - Audit reports must be tamper-evident
+      - Access to audit data requires approval
+      decision_points:
+      - decision: Complete audit trail?
+        rule: If yes, generate report
+        expected_outcome: Audit report ready
+      output_criteria:
+        success_outputs:
+        - audit_report_id
+        - status: complete
+        failure_outputs:
+        - audit_report_id: null
+        - status: incomplete
+      status_updates:
+      - audit_status -> complete
+      - audit_status -> incomplete
+      emitted_events:
+      - audit.report_generated
+      - audit.incomplete_flagged
+      user_visible_outputs:
+      - Audit report download
+      - Completeness status
+      - Access log
+      edge_cases:
+      - Data retention expiry
+      - Corrupted decision context
+      - Unauthorized access attempt
+      negative_scenarios:
+      - Missing audit records
+      - Tampered logs
+      - Invalid timestamp range
+      explainability_expectations:
+      - Full decision path reconstruction
+      - Rule evaluation sequence
+      - Actor attribution
+      audit_evidence:
+      - Immutable log storage
+      - Hash verification
+      - Access records
+    data_dependencies: []
+    audit_or_explainability_needs: []
+    layer_implications: {}
+    sample_test_scenarios: []
+    main_success_flow: []
+    alternate_flows: []
+    exception_flows: []

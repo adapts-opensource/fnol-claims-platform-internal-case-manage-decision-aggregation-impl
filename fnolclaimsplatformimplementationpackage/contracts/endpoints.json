@@ -1,0 +1,14 @@
+{
+  "base_url_env": "APP_BASE_URL",
+  "default_port": 8080,
+  "health_route": "/health",
+  "endpoints": [
+    {
+      "feature": "Internal Case Management:decision:aggregation",
+      "route": "/api/internal_case_management_decision_aggregation",
+      "method": "POST",
+      "service": "internal_case_management_decision_aggregation_service",
+      "payload_hint": "JSON request body inferred from feature inputs"
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "language": "java",
+  "status": "disabled",
+  "steps": [],
+  "tool_available": false,
+  "enforced": false,
+  "package_root": "/var/tmp/app/fnol-phased-1783350481/FNOLClaimsPlatformImplementationPackage/fnolclaimsplatformimplementationpackage",
+  "request_id": "fnol-phased-1783350481"
+}
